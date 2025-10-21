@@ -118,13 +118,42 @@
             border-radius: 6px; 
             box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
             transition: all 0.15s ease-out;
-            cursor: pointer; /* 클릭 가능하도록 커서 변경 */
+            cursor: grab; /* 드래그 가능한 커서 */
+            user-select: none; /* 텍스트 선택 방지 */
+            position: relative;
         }
 
         .equipment-block:hover {
             transform: translateY(-1px);
             box-shadow: 0 2px 4px rgba(0,0,0,0.15);
             filter: brightness(1.1); /* 살짝 밝아지는 효과 */
+        }
+
+        /* 드래그 중 상태 */
+        .equipment-block.dragging {
+            cursor: grabbing;
+            transform: rotate(5deg) scale(1.05);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            z-index: 1000;
+            opacity: 0.8;
+        }
+
+        /* 드롭 가능한 영역 */
+        .dashboard-grid.drag-over {
+            background-color: rgba(0, 122, 255, 0.1);
+            border: 2px dashed var(--ios-blue);
+        }
+
+        /* 드롭 가능한 셀 */
+        .grid-cell.drop-target {
+            background-color: rgba(52, 199, 89, 0.2);
+            border: 2px dashed var(--ios-green);
+        }
+
+        /* 빈 셀 스타일 */
+        .grid-cell {
+            border: 1px solid transparent;
+            transition: all 0.2s ease-out;
         }
 
         /* 설비 상태(status)별 색상 */
@@ -138,6 +167,10 @@
 <body>
 
     <h1>공장 배치 대시보드</h1>
+    
+    <div style="text-align: center; margin-bottom: 20px; padding: 10px; background-color: rgba(0, 122, 255, 0.1); border-radius: 8px; font-size: 14px; color: var(--ios-blue);">
+        🖱️ <strong>드래그 앤 드롭 기능:</strong> 설비 블록을 마우스로 드래그해서 새로운 위치에 배치하세요!
+    </div>
 
     <div class="building-selector">
         <button class="building-button active" data-building-id="A">A동 (조립)</button>
@@ -205,6 +238,10 @@
         const dashboardGrid = document.getElementById('dashboard-grid');
         const buildingButtons = document.querySelectorAll('.building-button');
 
+        // 드래그 앤 드롭 관련 변수
+        let draggedElement = null;
+        let draggedData = null;
+
         /**
          * 설비 데이터를 기반으로 HTML 요소(블록)를 렌더링하는 함수
          * @param {string} buildingId - 표시할 공장 동의 ID (예: "A", "B")
@@ -225,31 +262,180 @@
             dashboardGrid.style.gridTemplateRows = `repeat(${currentBuilding.grid_size.rows}, 1fr)`;
             dashboardGrid.style.aspectRatio = `${currentBuilding.grid_size.cols} / ${currentBuilding.grid_size.rows}`;
 
-            // 4. 설비 목록을 순회하며 블록 생성
-            currentBuilding.equipment.forEach(equip => {
-                const block = document.createElement('div');
-                block.classList.add('equipment-block');
-                block.classList.add('status-' + equip.status); // 예: 'status-running'
-                
-                block.innerText = equip.name; // 블록에 이름 표시
-                
-                // 나중에 상세 정보 표시에 사용할 데이터 저장
-                block.dataset.id = equip.id;
-                block.dataset.name = equip.name;
-                block.dataset.status = equip.status;
-                
-                // CSS Grid 위치 및 크기 지정
-                block.style.gridColumn = `${equip.x} / span ${equip.width}`;
-                block.style.gridRow = `${equip.y} / span ${equip.height}`;
-                
-                // 그리드에 블록 추가
-                dashboardGrid.appendChild(block);
+            // 4. 빈 그리드 셀들 생성
+            createEmptyGridCells(currentBuilding);
 
-                // (추가) 블록 클릭 이벤트 리스너
-                block.addEventListener('click', () => {
-                    alert(`설비명: ${equip.name}\n상태: ${equip.status}\nID: ${equip.id}`);
-                });
+            // 5. 설비 목록을 순회하며 블록 생성
+            currentBuilding.equipment.forEach(equip => {
+                createEquipmentBlock(equip, currentBuilding);
             });
+        }
+
+        /**
+         * 빈 그리드 셀들을 생성하는 함수
+         */
+        function createEmptyGridCells(building) {
+            const totalCells = building.grid_size.rows * building.grid_size.cols;
+            for (let i = 0; i < totalCells; i++) {
+                const cell = document.createElement('div');
+                cell.classList.add('grid-cell');
+                cell.dataset.cellIndex = i;
+                dashboardGrid.appendChild(cell);
+            }
+        }
+
+        /**
+         * 설비 블록을 생성하고 드래그 앤 드롭 이벤트를 추가하는 함수
+         */
+        function createEquipmentBlock(equip, building) {
+            const block = document.createElement('div');
+            block.classList.add('equipment-block');
+            block.classList.add('status-' + equip.status);
+            
+            block.innerText = equip.name;
+            
+            // 데이터 저장
+            block.dataset.id = equip.id;
+            block.dataset.name = equip.name;
+            block.dataset.status = equip.status;
+            block.dataset.width = equip.width;
+            block.dataset.height = equip.height;
+            
+            // CSS Grid 위치 및 크기 지정
+            block.style.gridColumn = `${equip.x} / span ${equip.width}`;
+            block.style.gridRow = `${equip.y} / span ${equip.height}`;
+            
+            // 드래그 앤 드롭 이벤트 추가
+            setupDragAndDrop(block, equip, building);
+            
+            // 클릭 이벤트 (드래그와 구분)
+            block.addEventListener('click', (e) => {
+                if (!block.classList.contains('dragging')) {
+                    alert(`설비명: ${equip.name}\n상태: ${equip.status}\nID: ${equip.id}`);
+                }
+            });
+            
+            dashboardGrid.appendChild(block);
+        }
+
+        /**
+         * 드래그 앤 드롭 이벤트를 설정하는 함수
+         */
+        function setupDragAndDrop(block, equip, building) {
+            // 드래그 시작
+            block.addEventListener('mousedown', (e) => {
+                if (e.button === 0) { // 왼쪽 마우스 버튼만
+                    draggedElement = block;
+                    draggedData = equip;
+                    block.classList.add('dragging');
+                    dashboardGrid.classList.add('drag-over');
+                    
+                    // 마우스 이동 이벤트
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                    
+                    e.preventDefault();
+                }
+            });
+        }
+
+        /**
+         * 마우스 이동 처리
+         */
+        function handleMouseMove(e) {
+            if (!draggedElement) return;
+            
+            // 마우스 위치에 따른 드롭 타겟 하이라이트
+            const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+            if (elementBelow && elementBelow.classList.contains('grid-cell')) {
+                // 이전 하이라이트 제거
+                document.querySelectorAll('.grid-cell.drop-target').forEach(cell => {
+                    cell.classList.remove('drop-target');
+                });
+                
+                // 새로운 타겟 하이라이트
+                elementBelow.classList.add('drop-target');
+            }
+        }
+
+        /**
+         * 마우스 업 처리 (드롭)
+         */
+        function handleMouseUp(e) {
+            if (!draggedElement || !draggedData) return;
+            
+            const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+            
+            if (elementBelow && elementBelow.classList.contains('grid-cell')) {
+                // 새로운 위치 계산
+                const cellIndex = parseInt(elementBelow.dataset.cellIndex);
+                const cols = parseInt(dashboardGrid.style.gridTemplateColumns.match(/\d+/)[0]);
+                const newX = (cellIndex % cols) + 1;
+                const newY = Math.floor(cellIndex / cols) + 1;
+                
+                // 충돌 검사
+                if (canPlaceEquipment(newX, newY, draggedData.width, draggedData.height, draggedData.id)) {
+                    // 위치 업데이트
+                    draggedData.x = newX;
+                    draggedData.y = newY;
+                    
+                    // 시각적 업데이트
+                    draggedElement.style.gridColumn = `${newX} / span ${draggedData.width}`;
+                    draggedElement.style.gridRow = `${newY} / span ${draggedData.height}`;
+                    
+                    console.log(`설비 ${draggedData.name}이 (${newX}, ${newY})로 이동되었습니다.`);
+                }
+            }
+            
+            // 정리
+            draggedElement.classList.remove('dragging');
+            dashboardGrid.classList.remove('drag-over');
+            document.querySelectorAll('.grid-cell.drop-target').forEach(cell => {
+                cell.classList.remove('drop-target');
+            });
+            
+            // 이벤트 리스너 제거
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
+            draggedElement = null;
+            draggedData = null;
+        }
+
+        /**
+         * 설비 배치 가능 여부를 확인하는 함수
+         */
+        function canPlaceEquipment(x, y, width, height, excludeId) {
+            const currentBuilding = factoryData.factory.find(b => b.id === getCurrentBuildingId());
+            if (!currentBuilding) return false;
+            
+            // 그리드 경계 확인
+            if (x + width - 1 > currentBuilding.grid_size.cols || 
+                y + height - 1 > currentBuilding.grid_size.rows) {
+                return false;
+            }
+            
+            // 다른 설비와의 충돌 확인
+            for (let equip of currentBuilding.equipment) {
+                if (equip.id === excludeId) continue;
+                
+                if (!(x >= equip.x + equip.width || 
+                      x + width <= equip.x || 
+                      y >= equip.y + equip.height || 
+                      y + height <= equip.y)) {
+                    return false; // 충돌 발생
+                }
+            }
+            
+            return true;
+        }
+
+        /**
+         * 현재 선택된 동의 ID를 반환하는 함수
+         */
+        function getCurrentBuildingId() {
+            const activeButton = document.querySelector('.building-button.active');
+            return activeButton ? activeButton.dataset.buildingId : 'A';
         }
 
         /**
