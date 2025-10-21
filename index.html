@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>공장 배치 대시보드 - iOS 스타일</title>
+    
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+    
+    <style>
+        /* ------------------------- */
+        /* --- CSS 스타일 시트 --- */
+        /* ------------------------- */
+
+        :root {
+            /* iOS 컬러 팔레트 */
+            --ios-blue: #007aff;
+            --ios-green: #34c759;
+            --ios-red: #ff3b30;
+            --ios-yellow: #ffcc00;
+            --ios-gray: #8e8e93; /* 점검 중 상태 추가 */
+            --background-light: #f9f9f9;
+            --card-background: #ffffff;
+            --text-dark: #333333;
+            --text-muted: var(--ios-gray);
+            --border-light: #e0e0e0;
+            --shadow-light: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+            --border-radius-card: 12px;
+            --border-radius-button: 8px;
+        }
+
+        body {
+            font-family: 'Pretendard', sans-serif; /* iOS 시스템 폰트 유사 */
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-light);
+            color: var(--text-dark);
+            -webkit-font-smoothing: antialiased; /* 폰트 부드럽게 */
+        }
+        
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        /* 공장 동 선택 탭 */
+        .building-selector {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            gap: 10px;
+        }
+
+        .building-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--border-radius-button);
+            background-color: var(--card-background);
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: var(--shadow-light);
+            transition: all 0.2s ease-out;
+        }
+
+        .building-button:hover {
+            box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+            transform: translateY(-2px);
+        }
+
+        .building-button.active {
+            background-color: var(--ios-blue);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 122, 255, 0.4); /* 강조색 그림자 */
+        }
+        
+        /* 대시보드 그리드 컨테이너 */
+        #dashboard-container {
+            background-color: var(--card-background);
+            border-radius: var(--border-radius-card);
+            box-shadow: var(--shadow-light);
+            padding: 20px;
+            margin: 0 auto;
+            max-width: 1200px; 
+            box-sizing: border-box;
+        }
+
+        #dashboard-grid {
+            display: grid;
+            /* JS에서 동적으로 설정 */
+            /* grid-template-columns: repeat(12, 1fr); */
+            /* grid-template-rows: repeat(10, 1fr); */
+            width: 100%; 
+            /* aspect-ratio: 12 / 10; */ /* JS에서 동적으로 설정 */
+            border: 1px solid var(--border-light);
+            background-color: #f0f0f0; 
+            gap: 3px; 
+            border-radius: var(--border-radius-button); 
+            overflow: hidden; 
+        }
+
+        /* 설비 블록 */
+        .equipment-block {
+            border: none;
+            box-sizing: border-box;
+            padding: 8px; 
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--card-background); 
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-radius: 6px; 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+            transition: all 0.15s ease-out;
+            cursor: pointer; /* 클릭 가능하도록 커서 변경 */
+        }
+
+        .equipment-block:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            filter: brightness(1.1); /* 살짝 밝아지는 효과 */
+        }
+
+        /* 설비 상태(status)별 색상 */
+        .status-running { background-color: var(--ios-green); } 
+        .status-stopped { background-color: var(--ios-red); } 
+        .status-idle { background-color: var(--ios-yellow); color: var(--text-dark); } 
+        .status-maintenance { background-color: var(--ios-gray); } /* 점검 중 상태 */
+
+    </style>
+</head>
+<body>
+
+    <h1>공장 배치 대시보드</h1>
+
+    <div class="building-selector">
+        <button class="building-button active" data-building-id="A">A동 (조립)</button>
+        <button class="building-button" data-building-id="B">B동 (창고)</button>
+        <button class="building-button" data-building-id="C">C동 (가공)</button>
+    </div>
+
+    <div id="dashboard-container">
+        <div id="dashboard-grid">
+            </div>
+    </div>
+
+    <script>
+        
+        // 전체 공장 데이터 (각 동의 정보 포함)
+        const factoryData = {
+            "factory": [
+                {
+                    "id": "A",
+                    "name": "A동 (조립 라인)",
+                    "grid_size": { "rows": 10, "cols": 12 }, 
+                    "equipment": [
+                        { 
+                          "id": "A-01", "name": "1번 프레스", 
+                          "x": 1, "y": 1, "width": 3, "height": 4, "status": "running" 
+                        },
+                        { 
+                          "id": "A-02", "name": "2번 용접기", 
+                          "x": 4, "y": 1, "width": 2, "height": 2, "status": "stopped"
+                        },
+                        { 
+                          "id": "A-03", "name": "3번 검사기", 
+                          "x": 1, "y": 5, "width": 5, "height": 2, "status": "idle"
+                        },
+                        { 
+                          "id": "A-04", "name": "4번 포장기", 
+                          "x": 7, "y": 1, "width": 3, "height": 6, "status": "maintenance" /* 점검 중 상태로 변경 */
+                        }
+                    ]
+                },
+                {
+                    "id": "B",
+                    "name": "B동 (자재 창고)",
+                    "grid_size": { "rows": 8, "cols": 8 },
+                    "equipment": [
+                        { "id": "B-01", "name": "원자재 입고", "x": 1, "y": 1, "width": 4, "height": 3, "status": "idle" },
+                        { "id": "B-02", "name": "제품 출고", "x": 5, "y": 1, "width": 3, "height": 3, "status": "running" },
+                        { "id": "B-03", "name": "선반 구역", "x": 1, "y": 4, "width": 7, "height": 4, "status": "running" }
+                    ]
+                },
+                {
+                    "id": "C",
+                    "name": "C동 (가공 구역)",
+                    "grid_size": { "rows": 10, "cols": 10 },
+                    "equipment": [
+                        { "id": "C-01", "name": "CNC 가공기", "x": 2, "y": 2, "width": 3, "height": 3, "status": "running" },
+                        { "id": "C-02", "name": "연삭기", "x": 6, "y": 2, "width": 2, "height": 2, "status": "stopped" },
+                        { "id": "C-03", "name": "로봇 팔", "x": 2, "y": 6, "width": 4, "height": 3, "status": "idle" }
+                    ]
+                }
+            ]
+        };
+
+        // 필요한 HTML 요소 가져오기
+        const dashboardGrid = document.getElementById('dashboard-grid');
+        const buildingButtons = document.querySelectorAll('.building-button');
+
+        /**
+         * 설비 데이터를 기반으로 HTML 요소(블록)를 렌더링하는 함수
+         * @param {string} buildingId - 표시할 공장 동의 ID (예: "A", "B")
+         */
+        function renderLayout(buildingId) {
+            // 1. 현재 선택된 동의 데이터 찾기
+            const currentBuilding = factoryData.factory.find(b => b.id === buildingId);
+            if (!currentBuilding) {
+                console.error("해당하는 동을 찾을 수 없습니다:", buildingId);
+                return;
+            }
+
+            // 2. 그리드 초기화
+            dashboardGrid.innerHTML = ''; 
+
+            // 3. 그리드 크기 및 비율을 동적으로 설정
+            dashboardGrid.style.gridTemplateColumns = `repeat(${currentBuilding.grid_size.cols}, 1fr)`;
+            dashboardGrid.style.gridTemplateRows = `repeat(${currentBuilding.grid_size.rows}, 1fr)`;
+            dashboardGrid.style.aspectRatio = `${currentBuilding.grid_size.cols} / ${currentBuilding.grid_size.rows}`;
+
+            // 4. 설비 목록을 순회하며 블록 생성
+            currentBuilding.equipment.forEach(equip => {
+                const block = document.createElement('div');
+                block.classList.add('equipment-block');
+                block.classList.add('status-' + equip.status); // 예: 'status-running'
+                
+                block.innerText = equip.name; // 블록에 이름 표시
+                
+                // 나중에 상세 정보 표시에 사용할 데이터 저장
+                block.dataset.id = equip.id;
+                block.dataset.name = equip.name;
+                block.dataset.status = equip.status;
+                
+                // CSS Grid 위치 및 크기 지정
+                block.style.gridColumn = `${equip.x} / span ${equip.width}`;
+                block.style.gridRow = `${equip.y} / span ${equip.height}`;
+                
+                // 그리드에 블록 추가
+                dashboardGrid.appendChild(block);
+
+                // (추가) 블록 클릭 이벤트 리스너
+                block.addEventListener('click', () => {
+                    alert(`설비명: ${equip.name}\n상태: ${equip.status}\nID: ${equip.id}`);
+                });
+            });
+        }
+
+        /**
+         * 공장 동 선택 버튼 클릭 이벤트 처리
+         */
+        buildingButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // 모든 버튼에서 'active' 클래스 제거
+                buildingButtons.forEach(btn => btn.classList.remove('active'));
+                // 클릭된 버튼에 'active' 클래스 추가
+                this.classList.add('active');
+                
+                // 해당 동의 ID로 레이아웃 렌더링
+                const buildingId = this.dataset.buildingId;
+                renderLayout(buildingId);
+            });
+        });
+
+        // --- 페이지 로드 시 초기 실행 ---
+        // 기본으로 'A동' 레이아웃을 그립니다.
+        renderLayout('A');
+
+    </script>
+
+</body>
+</html>
